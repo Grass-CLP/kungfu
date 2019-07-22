@@ -63,28 +63,28 @@
                     </template>
                 </el-table-column>
                 <el-table-column
-                    label="累计盈亏"
+                    label="实现盈亏"
                     show-overflow-tooltip
                     >
                     <template slot-scope="props">
                         <span :class="{
-                            'color-red': calcAccumulatedPnl(props.row) > 0,
-                            'color-green': calcAccumulatedPnl(props.row) < 0,
+                            'color-red': calcCash(props.row, 'realized_pnl') > 0,
+                            'color-green': calcCash(props.row, 'realized_pnl') < 0,
                         }">
-                        {{calcAccumulatedPnl(props.row) || '--'}}
+                        {{calcCash(props.row, 'realized_pnl') || '--'}}
                         </span> 
                     </template>
                 </el-table-column>
                 <el-table-column
-                    label="累计盈亏率"
+                    label="浮动盈亏"
                     show-overflow-tooltip
                     >
                     <template slot-scope="props">
                         <span :class="{
-                            'color-red': calcAccumulatedPnlRate(props.row) > 0,
-                            'color-green': calcAccumulatedPnlRate(props.row) < 0,
+                            'color-red': calcCash(props.row, 'unrealized_pnl') > 0,
+                            'color-green': calcCash(props.row, 'unrealized_pnl') < 0,
                         }">
-                        {{calcAccumulatedPnlRate(props.row) + '' ? calcAccumulatedPnlRate(props.row) + '%' : '--'}}
+                        {{calcCash(props.row, 'unrealized_pnl') || '--'}}
                         </span> 
                     </template>
                 </el-table-column>
@@ -176,16 +176,16 @@
 
 <script>
 import { mapState, mapGetters } from 'vuex';
-import { debounce } from '@/assets/js/utils';
-import * as ACCOUNT_API from '@/io/db/account';
-import * as BASE_API from '@/io/db/base';
-import {accountSource, sourceType, ifSourceDisable} from '@/assets/config/accountConfig';
+import { debounce } from '__gUtils/busiUtils';
+import * as ACCOUNT_API from '__io/db/account';
+import * as BASE_API from '__io/db/base';
+import {accountSource, sourceType, ifSourceDisable} from '__gConfig/accountConfig';
 import SetAccountDialog from './SetAccountDialog';
 import SetFeeDialog from './SetFeeDialog';
 import { deleteProcess } from '__gUtils/processUtils';
 import { TD_DIR, LOG_DIR } from '__gConfig/pathConfig';
-import { removeFileFolder, openReadFile } from "__gUtils/fileUtils.js";
-import { deleteAccount, switchTd } from '@/io/actions/account';
+import { removeFileFolder, openReadFile } from "__gUtils/fileUtils";
+import { deleteAccount, switchTd } from '__io/actions/account';
 
 import path from 'path'
 export default {
@@ -408,9 +408,9 @@ export default {
         },
 
         //计算持仓盈亏
-        calcAccumulatedPnl(row){
+        calcCash(row, key){
             const t = this;
-            return t.$utils.toDecimal((t.accountsAsset[row.account_id] || {}).accumulated_pnl) + ''
+            return t.$utils.toDecimal((t.accountsAsset[row.account_id] || {})[key]) + ''
         },
 
         //计算持仓盈亏率

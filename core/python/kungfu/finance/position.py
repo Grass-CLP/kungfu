@@ -10,14 +10,12 @@ class Position:
         if isinstance(self._instrument_type, int):
             self._instrument_type = InstrumentType(self._instrument_type)
         self._symbol_id = get_symbol_id(self._instrument_id, self._exchange_id)
-
         self._last_price = kwargs.pop("last_price", 0.0)
-
         self._ledger = kwargs.pop("ledger", None)
 
     @property
-    def message(self):
-        raise NotImplementationError
+    def msg_type(self):
+        return int(MsgType.Position)
 
     @property
     def instrument_type(self):
@@ -66,7 +64,6 @@ class Position:
     def apply_trade(self, trade):
         raise NotImplementationError
 
-
     def apply_quote(self, quote):
         raise NotImplementationError
 
@@ -83,7 +80,7 @@ class StockPosition(Position):
         self._yesterday_volume = kwargs.pop("yesterday_volume", 0)
 
         self._avg_open_price = kwargs.pop("open_price", 0.0)
-        if self._avg_open_price <= 0.0:
+        if not is_valid_price(self._avg_open_price):
             self._avg_open_price = kwargs.pop("cost_price", 0.0) # fill with position cost price
         self._close_price = kwargs.pop("close_price", 0.0)
         self._pre_close_price = kwargs.pop("pre_close_price", 0.0)
@@ -93,15 +90,26 @@ class StockPosition(Position):
     @property
     def message(self):
         return {
+            "msg_type": self.msg_type,
+            "data":  {
+                "ledger_category": int(self.ledger.category),
+                "trading_day": self.ledger.trading_day.strftime("%Y%m%d"),
+                "account_id": self.ledger.account_id,
+                "client_id": self.ledger.client_id,
+                "source_id": self.ledger.source_id,
                 "instrument_id": self.instrument_id,
                 "exchange_id":self.exchange_id,
                 "direction": int(Direction.Long),
                 "volume":self.volume,
                 "yesterday_volume": self.yesterday_volume,
+                "last_price": self.last_price,
+                "open_price": self.avg_open_price,
+                "close_price": self.close_price,
+                "pre_close_price": self.pre_close_price,
                 "realized_pnl": self.realized_pnl,
                 "unrealized_pnl": self.unrealized_pnl
-             }
-
+            }
+        }
 
     @property
     def volume(self):
@@ -141,20 +149,31 @@ class StockPosition(Position):
 
     def apply_trade(self, trade):
         if trade.side == Side.Buy:
-            return self._apply_buy(trade.price, trade.volume)
+            self._apply_buy(trade.price, trade.volume)
         else:
-            return self._apply_sell(trade.price, trade.volume)
+            self._apply_sell(trade.price, trade.volume)
+        self.ledger.dispatch([self.ledger.message, self.message])
 
     def apply_settlement(self, close_price):
+        self._last_price = close_price
         self._close_price = close_price
 
-    def apply_quote(self, Quote):
-        self._last_price = Quote.last_price
+    def apply_quote(self, quote):
+        pre_market_value = self.market_value
+        if is_valid_price(quote.close_price):
+            self.apply_settlement(quote.close_price)
+        elif is_valid_price(quote.last_price):
+            self._last_price = quote.last_price
+        if  abs(self.market_value - pre_market_value) >= 0.01:
+            self.ledger.dispatch([self.ledger.message, self.message])
 
     def switch_day(self, trading_day):
+        if not is_valid_price(self.close_price):
+            self.apply_settlement(self.last_price)
         self._pre_close_price = self.close_price
         self._yesterday_volume = self.volume
-        self.close_price = 0.0
+        self._close_price = 0.0
+        self.ledger.dispatch([self.message])
 
     def _apply_sell(self, price, volume):
         realized_pnl = self._calculate_realized_pnl(price, volume)
@@ -223,7 +242,6 @@ class FuturePositionDetail:
 
 
     def apply_close(self, price, volume=None):
-        #平仓
         volume_closed = min(self._volume, volume) if volume else self._volume
         realized_pnl = self._calculate_realized_pnl(price, volume_closed)
         margin_delta = self._calculate_margin(price, volume_closed) * -1
@@ -231,7 +249,6 @@ class FuturePositionDetail:
         return (volume_closed, realized_pnl, margin_delta)
 
     def apply_settlement(self, settlement_price):
-        #结算
         pre_margin = self.margin
         self._pre_settlement_price = self._settlement_price
         self._settlement_price = settlement_price
@@ -249,6 +266,9 @@ class FuturePosition(Position):
         self._long_details = kwargs.pop("long_details", [])
         self._short_details = []
         self._realized_pnl = 0.0
+
+    def get_message(self, direction):
+        pass
 
     @property
     def realized_pnl(self):

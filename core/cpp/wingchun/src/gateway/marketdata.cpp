@@ -14,7 +14,6 @@ using namespace kungfu::rx;
 using namespace kungfu::yijinjing;
 using namespace kungfu::yijinjing::data;
 using namespace kungfu::wingchun::msg::data;
-using namespace kungfu::wingchun::msg::nanomsg;
 
 namespace kungfu
 {
@@ -28,11 +27,11 @@ namespace kungfu
                 log::copy_log_settings(get_io_device()->get_home(), source);
             }
 
-            void MarketData::react(const rx::observable<yijinjing::event_ptr> &events)
+            void MarketData::on_start()
             {
-                apprentice::react(events);
+                apprentice::on_start();
 
-                events | is(msg::type::Subscribe) |
+                events_ | is(msg::type::Subscribe) |
                 $([&](event_ptr event)
                   {
                       SPDLOG_INFO("subscribe request");
@@ -71,11 +70,6 @@ namespace kungfu
                       }
                       subscribe(symbols);
                   });
-            }
-
-            void MarketData::on_start(const rx::observable<yijinjing::event_ptr> &events)
-            {
-                apprentice::on_start(events);
             }
         }
     }

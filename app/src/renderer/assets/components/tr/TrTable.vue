@@ -94,7 +94,7 @@
 import Vue from 'vue';
 import VueVirtualScroller from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
-import {debounce, sum} from '@/assets/js/utils';
+import {debounce, sum} from '__gUtils/busiUtils';
 
 Vue.use(VueVirtualScroller)
 export default {
@@ -144,11 +144,6 @@ export default {
     },
 
     computed: {
-        isArray(){
-            const t = this;
-            return Object.prototype.toString.call(t.data)
-        },
-
         headerWidth(){
             const t = this;
             let widths = []; //column use with

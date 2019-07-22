@@ -123,7 +123,7 @@ class PyMaster : public master
 public:
     using master::master;
 
-    void on_notice(kungfu::yijinjing::event_ptr event) override
+    void on_notice(const kungfu::yijinjing::event_ptr &event) override
     {
         PYBIND11_OVERLOAD(void, master, on_notice, event);
     }
@@ -132,9 +132,30 @@ public:
     {
         PYBIND11_OVERLOAD(void, master, on_interval_check, nanotime);
     }
+
+    void on_register(const kungfu::yijinjing::event_ptr &event) override
+    {
+        PYBIND11_OVERLOAD(void, master, on_register, event);
+    }
+
+    void on_exit() override
+    {
+        PYBIND11_OVERLOAD(void, master, on_exit);
+    }
 };
 
-msg::data::RequestReadFrom get_RequestReadFrom(frame_ptr f)
+class PyApprentice : public apprentice
+{
+public:
+    using apprentice::apprentice;
+
+    void on_trading_day(const event_ptr &event, int64_t daytime) override
+    {
+        PYBIND11_OVERLOAD(void, apprentice, on_trading_day, event, daytime);
+    }
+};
+
+msg::data::RequestReadFrom get_RequestReadFrom(const frame_ptr& f)
 {
     return f->data<msg::data::RequestReadFrom>();
 }
@@ -243,7 +264,7 @@ PYBIND11_MODULE(pyyjj, m)
             .def("close", &socket::close)
             .def("send", &socket::send, py::arg("msg"), py::arg("flags") = 0)
             .def("recv", &socket::recv_msg, py::arg("flags") = 0)
-            .def("last_messsage", &socket::last_message);
+            .def("last_message", &socket::last_message);
 
     py::class_<publisher, PyPublisher, publisher_ptr>(m, "publisher")
             .def("publish", &publisher::publish)
@@ -265,7 +286,8 @@ PYBIND11_MODULE(pyyjj, m)
             .def("write_raw", &writer::write_raw);
 
     py::class_<io_device, io_device_ptr> io_device(m, "io_device");
-    io_device.def_property_readonly("publisher", &io_device::get_publisher)
+    io_device.def(py::init<data::location_ptr, bool, bool>(), py::arg("location"), py::arg("low_latency") = false, py::arg("lazy") = true)
+            .def_property_readonly("publisher", &io_device::get_publisher)
             .def_property_readonly("observer", &io_device::get_observer)
             .def_property_readonly("home", &io_device::get_home)
             .def_property_readonly("live_home", &io_device::get_live_home)
@@ -274,26 +296,34 @@ PYBIND11_MODULE(pyyjj, m)
             .def("open_writer", &io_device::open_writer)
             .def("connect_socket", &io_device::connect_socket, py::arg("location"), py::arg("protocol"), py::arg("timeout") = 0);
 
-    py::class_<io_device_master, io_device_master_ptr>(m, "io_device_master", io_device)
+    py::class_<io_device_with_reply, io_device_with_reply_ptr> io_device_with_reply(m, "io_device_with_reply", io_device);
+    io_device_with_reply.def(py::init<data::location_ptr, bool, bool>());
+
+    py::class_<io_device_master, io_device_master_ptr>(m, "io_device_master", io_device_with_reply)
             .def(py::init<data::location_ptr, bool>());
 
-    py::class_<io_device_client, io_device_client_ptr>(m, "io_device_client", io_device)
+    py::class_<io_device_client, io_device_client_ptr>(m, "io_device_client", io_device_with_reply)
             .def(py::init<data::location_ptr, bool>());
 
     py::class_<master, PyMaster>(m, "master")
             .def(py::init<data::location_ptr, bool>(), py::arg("home"), py::arg("low_latency") = false)
             .def_property_readonly("io_device", &master::get_io_device)
             .def("run", &master::run)
+            .def("publish_time", &master::publish_time)
+            .def("send_time", &master::send_time)
             .def("on_notice", &master::on_notice)
             .def("on_interval_check", &master::on_interval_check)
+            .def("on_register", &master::on_register)
+            .def("on_exit", &master::on_exit)
             .def("deregister_app", &master::deregister_app)
             ;
 
-    py::class_<apprentice, apprentice_ptr>(m, "apprentice")
+    py::class_<apprentice, PyApprentice, apprentice_ptr>(m, "apprentice")
             .def(py::init<data::location_ptr, bool>(), py::arg("home"), py::arg("low_latency") = false)
             .def_property_readonly("io_device", &apprentice::get_io_device)
             .def("set_begin_time", &apprentice::set_begin_time)
             .def("set_end_time", &apprentice::set_end_time)
+            .def("on_trading_day", &apprentice::on_trading_day)
             .def("run", &apprentice::run);
 
 

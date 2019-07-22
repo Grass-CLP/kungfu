@@ -34,7 +34,7 @@ namespace kungfu
             get_io_device()->get_publisher()->notify();
         }
 
-        void master::register_app(event_ptr e)
+        void master::register_app(const event_ptr& e)
         {
             auto request_loc = e->data<nlohmann::json>();
             auto app_location = std::make_shared<location>(
@@ -78,7 +78,7 @@ namespace kungfu
                 reader_->join(app_location, master_location->uid, now);
                 require_write_to(app_location->uid, e->gen_time(), master_location->uid);
 
-                for (const auto& item : locations_)
+                for (const auto &item : locations_)
                 {
                     nlohmann::json location;
                     location["mode"] = item.second->mode;
@@ -100,6 +100,7 @@ namespace kungfu
         {
             deregister_location(trigger_time, app_location_uid);
             reader_->disjoin(app_location_uid);
+            timer_tasks_.erase(app_location_uid);
             nlohmann::json msg{};
             auto now = time::now_in_nano();
             msg["gen_time"] = now;
@@ -109,18 +110,66 @@ namespace kungfu
             get_io_device()->get_publisher()->publish(msg.dump());
         }
 
-        void master::react(const observable<event_ptr> &events)
+        void master::publish_time(int32_t msg_type, int64_t nanotime)
         {
-            events | is(msg::type::Register) |
+            writers_[0]->write(0, msg_type, nanotime);
+        }
+
+        void master::send_time(uint32_t dest, int32_t msg_type, int64_t nanotime)
+        {
+            writers_[dest]->write(0, msg_type, nanotime);
+        }
+
+        bool master::produce_one(const rx::subscriber<yijinjing::event_ptr> &sb)
+        {
+            auto now = time::now_in_nano();
+
+            for (auto &app : timer_tasks_)
+            {
+                uint32_t app_id = app.first;
+                auto &app_tasks = app.second;
+                auto it = app_tasks.begin();
+                while (it != app_tasks.end())
+                {
+                    auto &task = it->second;
+                    if (task.checkpoint <= now)
+                    {
+                        writers_[app_id]->mark(0, msg::type::Time);
+                        task.checkpoint += task.duration;
+                        task.repeat_count++;
+                        SPDLOG_TRACE("sent time event to {}", get_location(app_id)->uname);
+                        if (task.repeat_count >= task.repeat_limit)
+                        {
+                            it = app_tasks.erase(it);
+                            continue;
+                        }
+                    }
+                    it++;
+                }
+            }
+
+            if (last_check_ + time_unit::NANOSECONDS_PER_SECOND < now)
+            {
+                on_interval_check(now);
+                last_check_ = now;
+            }
+
+            return hero::produce_one(sb);
+        }
+
+        void master::react()
+        {
+            events_ | is(msg::type::Register) |
             $([&](event_ptr e)
               {
                   register_app(e);
+                  on_register(e);
               });
 
-            events | is(msg::type::RequestWriteTo) |
+            events_ | is(msg::type::RequestWriteTo) |
             $([&](event_ptr e)
               {
-                  auto request = e->data<msg::data::RequestWriteTo>();
+                  const msg::data::RequestWriteTo &request = e->data<msg::data::RequestWriteTo>();
                   if (not has_location(request.dest_id))
                   {
                       SPDLOG_ERROR("Request publish to unknown location {:08x}", request.dest_id);
@@ -131,12 +180,13 @@ namespace kungfu
                   require_read_from(request.dest_id, e->gen_time(), e->source(), false);
               });
 
-            events | filter([&](event_ptr e){
-                return e->msg_type() == msg::type::RequestReadFromPublic or e->msg_type() == msg::type::RequestReadFrom;
-            }) |
+            events_ | filter([&](event_ptr e)
+                            {
+                                return e->msg_type() == msg::type::RequestReadFromPublic or e->msg_type() == msg::type::RequestReadFrom;
+                            }) |
             $([&](event_ptr e)
               {
-                  auto request = e->data<msg::data::RequestReadFrom>();
+                  const msg::data::RequestReadFrom &request = e->data<msg::data::RequestReadFrom>();
                   if (not has_location(request.source_id))
                   {
                       SPDLOG_ERROR("Request subscribe to unknown location {:08x}", request.source_id);
@@ -150,7 +200,29 @@ namespace kungfu
                   require_read_from(e->source(), e->gen_time(), request.source_id, e->msg_type() == msg::type::RequestReadFromPublic);
               });
 
-            events |
+            events_ | is(msg::type::TimeRequest) |
+            $([&](event_ptr e)
+              {
+                  const msg::data::TimeRequest &request = e->data<msg::data::TimeRequest>();
+                  if (timer_tasks_.find(e->source()) == timer_tasks_.end())
+                  {
+                      timer_tasks_[e->source()] = std::unordered_map<int32_t, TimerTask>();
+                  }
+                  std::unordered_map<int32_t, TimerTask> &app_tasks = timer_tasks_[e->source()];
+                  if (app_tasks.find(request.id) == app_tasks.end())
+                  {
+                      app_tasks[request.id] = TimerTask();
+                  }
+                  TimerTask &task = app_tasks[request.id];
+                  task.checkpoint = time::now_in_nano() + request.duration;
+                  task.duration = request.duration;
+                  task.repeat_count = 0;
+                  task.repeat_limit = request.repeat;
+                  SPDLOG_DEBUG("time request from {} duration {} repeat {}, next checkpoint {}",
+                          get_location(e->source())->uname, request.duration, request.repeat, time::strftime(task.checkpoint));
+              });
+
+            events_ |
             filter([=](yijinjing::event_ptr e)
                    {
                        return dynamic_cast<nanomsg::nanomsg_json *>(e.get()) != nullptr;

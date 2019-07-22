@@ -2,6 +2,7 @@
 // Created by qlu on 2019/2/11.
 //
 
+#include <utility>
 #include <fmt/format.h>
 #include <kungfu/wingchun/gateway/macro.h>
 
@@ -19,7 +20,7 @@ namespace kungfu
         namespace xtp
         {
             MdGateway::MdGateway(bool low_latency, yijinjing::data::locator_ptr locator, std::map<std::string, std::string> &config_str, std::map<std::string, int> &config_int,
-                                 std::map<std::string, double> &config_double) : gateway::MarketData(low_latency, locator, SOURCE_XTP)
+                                 std::map<std::string, double> &config_double) : gateway::MarketData(low_latency, std::move(locator), SOURCE_XTP)
             {
                 yijinjing::log::copy_log_settings(get_io_device()->get_home(), SOURCE_XTP);
 
@@ -41,9 +42,9 @@ namespace kungfu
                 }
             }
 
-            void MdGateway::on_start(const rx::observable<yijinjing::event_ptr> &events)
+            void MdGateway::on_start()
             {
-                gateway::MarketData::on_start(events);
+                gateway::MarketData::on_start();
                 SPDLOG_INFO("Connecting XTP MD for {} at {}:{}", user_, ip_, port_);
 
                 if (api_ != nullptr)

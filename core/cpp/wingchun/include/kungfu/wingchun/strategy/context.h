@@ -6,9 +6,7 @@
 #define WINGCHUN_CONTEXT_H
 
 #include <kungfu/practice/apprentice.h>
-
 #include <kungfu/wingchun/msg.h>
-#include <kungfu/wingchun/calendar/calendar.h>
 
 namespace kungfu
 {
@@ -23,10 +21,12 @@ namespace kungfu
                 return yijinjing::util::hash_str_32(symbol) ^ yijinjing::util::hash_str_32(exchange);
             }
 
-            class Context
+            FORWARD_DECLARE_PTR(Context)
+
+            class Context : public std::enable_shared_from_this<Context>
             {
             public:
-                explicit Context(practice::apprentice &app, const rx::observable<yijinjing::event_ptr> &events);
+                explicit Context(practice::apprentice &app, const rx::connectable_observable<yijinjing::event_ptr> &events);
 
                 ~Context() = default;
 
@@ -34,19 +34,23 @@ namespace kungfu
                 //@return            当前纳秒时间
                 int64_t now() const;
 
+                void add_timer(int64_t nanotime, const std::function<void(yijinjing::event_ptr)> &callback);
+
+                void add_time_interval(int64_t duration, const std::function<void(yijinjing::event_ptr)> &callback);
+
                 //添加策略使用的交易账户
                 //@param source_id   柜台ID
                 //@param account_id  账户ID
                 //@param cash_limit  可用资金限制
-                //@return            成功或者失败
                 void add_account(const std::string &source, const std::string &account, double cash_limit);
 
                 //订阅行情
                 //@param source_id   柜台ID
                 //@param instruments 合约列表
                 //@param exchange_id 交易所ID
-                //@param is_level2   是否订阅Level2数据
                 void subscribe(const std::string &source, const std::vector<std::string> &instruments, const std::string &exchange = "");
+
+                uint64_t insert_order(const msg::data::OrderInput &input);
 
                 //限价单报单
                 //@param instrument_id 合约ID
@@ -101,7 +105,7 @@ namespace kungfu
                 uint64_t cancel_order(uint64_t order_id);
 
             protected:
-                void react(const rx::observable<yijinjing::event_ptr>& events);
+                void react();
 
             private:
                 uint32_t lookup_account_location_id(const std::string &account);
@@ -109,21 +113,17 @@ namespace kungfu
                 void request_subscribe(uint32_t source, const std::vector<std::string> &symbols, const std::string &exchange);
 
             private:
-                practice::apprentice& app_;
-                const rx::observable<yijinjing::event_ptr> &events_;
-                int64_t now_;
-
-                Calendar_ptr calendar_;
+                practice::apprentice &app_;
+                const rx::connectable_observable<yijinjing::event_ptr> &events_;
 
                 std::unordered_map<uint32_t, uint32_t> account_location_ids_;
-                std::unordered_map<uint32_t, msg::data::AccountInfo> accounts_;
+                std::unordered_map<uint32_t, std::string> accounts_;
                 std::unordered_map<uint32_t, msg::data::Quote> quotes_;
 
                 std::unordered_map<std::string, uint32_t> market_data_;
 
                 friend class Runner;
             };
-            DECLARE_PTR(Context)
         }
     }
 }

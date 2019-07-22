@@ -40,7 +40,7 @@ namespace kungfu
 
                 //交易日切换回调
                 //@param next_trading_day  下一个交易日
-                virtual void on_switch_day(Context_ptr context, const std::string &next_trading_day)
+                virtual void on_trading_day(Context_ptr context, const std::string &next_trading_day)
                 {};
 
                 //行情数据更新回调
@@ -68,12 +68,6 @@ namespace kungfu
                 virtual void on_trade(Context_ptr context, const msg::data::Trade &trade)
                 {};
 
-                //算法订单状态更新回调
-                //@param order_id          订单ID
-                //@param algo_type         订单类型
-                //@param event_msg         订单更新事件
-                virtual void on_algo_order_status(Context_ptr context, uint64_t order_id, const std::string &algo_type, const std::string &event_msg)
-                {};
             };
 
             DECLARE_PTR(Strategy)

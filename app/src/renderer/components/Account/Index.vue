@@ -71,17 +71,18 @@ import CurrentOrder from '../Base/CurrentOrder';
 import TradeRecord from '../Base/TradeRecord';
 import Pos from '../Base/Pos';
 import Pnl from '../Base/pnl/Pnl';
-import { sourceType } from '@/assets/config/accountConfig';
-import * as ACCOUNT_API from '@/io/db/account';
-import { debounce } from '@/assets/js/utils';
-import { buildTradingDataPipe, buildCashPipe } from '@/io/nano/nanoSub';
-import * as MSG_TYPE from '@/io/nano/msgType';
+import { sourceType } from '__gConfig/accountConfig';
+import * as ACCOUNT_API from '__io/db/account';
+import { debounce } from '__gUtils/busiUtils';
+import { buildTradingDataPipe, buildCashPipe } from '__io/nano/nanoSub';
+import * as MSG_TYPE from '__io/nano/msgType';
 
 
 export default {
     name: 'account',
     data() {
         const t = this;
+        this.tradingDataPipe = null;
         return {
             ordersFromNmsg: null,
             tradesFromNmsg: null,
@@ -115,11 +116,13 @@ export default {
 
     mounted(){
         const t = this;
-        buildTradingDataPipe().subscribe(d => {
+        t.tradingDataPipe = buildTradingDataPipe().subscribe(d => {
             const msgType = d.msg_type;
             const tradingData = d.data;
+            const ledgerCategory = tradingData.ledger_category
             const accountId = tradingData.account_id || '';
             const currentId = t.currentId.toAccountId();
+            console.log(d)
             switch (msgType) {
                 case MSG_TYPE.order:
                     if(accountId !== currentId) return;
@@ -131,16 +134,21 @@ export default {
                     break
                 case MSG_TYPE.position:
                     if(accountId !== currentId) return;
+                    if(ledgerCategory !== 0) return;
                     t.posFromNmsg = Object.freeze(tradingData);
                     break
+                case MSG_TYPE.portfolio:
+                    if(accountId !== currentId) return;
+                    if(ledgerCategory !== 0) return;
+                    t.minPnlFromNmsg = Object.freeze(tradingData);
+                    
             }
         })
+    },
 
-        buildCashPipe().subscribe(({ data }) => {
-            const { account_id, source_id } = data;
-            const accountId = `${source_id}_${account_id}`;  
-            t.$store.dispatch('setAccountAssetById', { accountId, accountAsset: Object.freeze(data) })
-        })
+    destroyed(){
+        const t = this;
+        t.tradingDataPipe && t.tradingDataPipe.unsubscribe();
     },
  
     methods:{
@@ -149,7 +157,6 @@ export default {
         getAccountTrade: ACCOUNT_API.getAccountTrade,
         getAccountPnlMin: ACCOUNT_API.getAccountPnlMin,
         getAccountPnlDay: ACCOUNT_API.getAccountPnlDay,
-
     }
 }
 </script>

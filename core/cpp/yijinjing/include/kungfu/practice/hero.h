@@ -15,12 +15,10 @@ namespace kungfu
 {
     namespace practice
     {
-        namespace msg = yijinjing::msg;
-
         class hero
         {
         public:
-            explicit hero(yijinjing::io_device_ptr io_device);
+            explicit hero(yijinjing::io_device_with_reply_ptr io_device);
 
             virtual ~hero()
             {}
@@ -28,7 +26,7 @@ namespace kungfu
             virtual void on_notify()
             {}
 
-            virtual void on_interval_check(int64_t nanotime)
+            virtual void on_exit()
             {}
 
             void set_begin_time(int64_t begin_time)
@@ -42,7 +40,7 @@ namespace kungfu
             void signal_stop()
             { live_ = false; };
 
-            yijinjing::io_device_ptr get_io_device() const
+            yijinjing::io_device_with_reply_ptr get_io_device() const
             { return io_device_; }
 
             uint32_t get_home_uid() const
@@ -53,6 +51,9 @@ namespace kungfu
 
             const std::string &get_home_uname() const
             { return get_io_device()->get_home()->uname; }
+
+            int64_t now()
+            { return now_; }
 
             bool has_location(uint32_t hash);
 
@@ -74,6 +75,8 @@ namespace kungfu
             std::unordered_map<uint32_t, yijinjing::journal::writer_ptr> writers_;
             int64_t begin_time_;
             int64_t end_time_;
+            int64_t now_;
+            rx::connectable_observable<yijinjing::event_ptr> events_;
 
             virtual void register_location(int64_t trigger_time, const yijinjing::data::location_ptr &location);
 
@@ -83,15 +86,15 @@ namespace kungfu
 
             void require_read_from(uint32_t dest_id, int64_t trigger_time, uint32_t source_id, bool pub);
 
-            virtual void react(const rx::observable<yijinjing::event_ptr> &events) = 0;
+            virtual void produce(const rx::subscriber<yijinjing::event_ptr> &sb);
 
-            rx::observable<yijinjing::event_ptr> stimeout(rx::observable<yijinjing::event_ptr> src);
+            virtual bool produce_one(const rx::subscriber<yijinjing::event_ptr> &sb);
+
+            virtual void react() = 0;
 
         private:
-            yijinjing::io_device_ptr io_device_;
+            yijinjing::io_device_with_reply_ptr io_device_;
             bool live_ = true;
-            int64_t now_;
-            int64_t last_check_;
         };
     }
 }

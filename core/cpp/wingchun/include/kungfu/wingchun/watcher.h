@@ -33,10 +33,11 @@ namespace kungfu
 
             virtual void on_trade(yijinjing::event_ptr event, const msg::data::Trade &trade) = 0;
 
-            virtual void on_assets(const msg::data::AccountInfo& account_info, const std::vector<msg::data::Position>& positions) = 0;
+            virtual void on_assets(const msg::data::AssetInfo& info, const std::vector<msg::data::Position>& positions) = 0;
+
+            virtual void pre_start() = 0;
 
         protected:
-            void react(const rx::observable<yijinjing::event_ptr> &events) override;
 
             void register_location(int64_t trigger_time, const yijinjing::data::location_ptr &location) override;
 
@@ -46,7 +47,7 @@ namespace kungfu
 
             void on_read_from(const yijinjing::event_ptr &event) override;
 
-            void on_start(const rx::observable<yijinjing::event_ptr> &events) override;
+            void on_start() override;
 
         private:
             yijinjing::nanomsg::socket_ptr pub_sock_;
@@ -55,7 +56,7 @@ namespace kungfu
 
             void watch(int64_t trigger_time, const yijinjing::data::location_ptr &app_location);
 
-            msg::data::AccountInfo account_info_;
+            msg::data::AssetInfo asset_info_;
             std::vector<msg::data::Position> position_buffer_;
 
         };

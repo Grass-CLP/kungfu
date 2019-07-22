@@ -12,7 +12,6 @@
 
 #include <kungfu/yijinjing/time.h>
 #include <kungfu/wingchun/msg.h>
-#include <kungfu/wingchun/util/business_helper.h>
 
 namespace kungfu
 {
@@ -22,9 +21,8 @@ namespace kungfu
         {
 
             using namespace kungfu::wingchun::msg::data;
-            using namespace kungfu::wingchun::msg::nanomsg;
 
-            inline void from_xtp_timestamp(const int64_t &xtp_time, int64_t &nsec)
+            inline void from_xtp_timestamp(int64_t xtp_time, int64_t nsec)
             {
                 //YYYYMMDDHHMMSSsss -> nano seconds
                 nsec = kungfu::yijinjing::time::strptime(std::to_string(xtp_time).c_str(), "%Y%m%d%H%M%S") +
@@ -281,8 +279,10 @@ namespace kungfu
                 des.cost_price = ori.avg_price;
             }
 
-            inline void from_xtp(const XTPQueryAssetRsp &ori, AccountInfo &des)
+            inline void from_xtp(const XTPQueryAssetRsp &ori, AssetInfo &des)
             {
+                strcpy(des.source_id, SOURCE_XTP);
+                des.ledger_category = LedgerCategory::Account;
                 des.avail = ori.buying_power;
             }
 

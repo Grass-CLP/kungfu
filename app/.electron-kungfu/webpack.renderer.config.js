@@ -8,10 +8,8 @@ const webpack = require('webpack')
 
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-// const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const OptimizeJsPlugin = require("optimize-js-plugin");
 const PreloadWebpackPlugin = require('preload-webpack-plugin');
-
 
 let whiteListedModules = [
   'vue', 
@@ -19,7 +17,12 @@ let whiteListedModules = [
   'vuex', 
   'vue-router', 
   'vue-virtual-scroller', 
-  'codemirror'
+  'codemirror',
+  "rxjs",
+  "moment",
+  "mime",
+  "readline",
+  "fast-csv"
 ];
 
 dependencies['kungfu-core'] = 'commonjs kungfu-core';
@@ -55,6 +58,11 @@ let rendererConfig = {
       {
         test: /\.html$/,
         use: 'vue-html-loader'
+      },
+      {
+        test: /\.ts$/,
+        use: 'ts-loader',
+        exclude: /node_modules/
       },
       {
         test: /\.js$/,
@@ -130,11 +138,11 @@ let rendererConfig = {
     }),
     new webpack.HotModuleReplacementPlugin(),
     new webpack.NoEmitOnErrorsPlugin(),
-    // new MonacoWebpackPlugin({
-    //   languages: ['cpp', 'json', 'powershell', 'python', 'shell', 'sql'],
-    // }),
     new PreloadWebpackPlugin({
       rel: 'preload',
+    }),
+    new OptimizeJsPlugin({
+      sourceMap: false
     })
   ],
   output: {
@@ -145,11 +153,13 @@ let rendererConfig = {
   resolve: {
     alias: {
       '@': path.join(__dirname, '../src/renderer'),
-      '__gUtils': path.join(__dirname, '../src/utils'),
-      '__gConfig': path.join(__dirname, '../src/config'),
+      '__gUtils': path.join(__dirname, '../shared/utils'),
+      '__gConfig': path.join(__dirname, '../shared/config'),
+      '__io': path.join(__dirname, '../shared/io'),
+      '__assets': path.join(__dirname, '../shared/assets'),
       'vue$': 'vue/dist/vue.esm.js'
     },
-    extensions: ['.js', '.vue', '.json', '.css', '.node']
+    extensions: ['.js', '.ts', '.vue', '.json', '.css', '.node']
   },
   target: 'electron-renderer'
 }
@@ -162,9 +172,6 @@ if (process.env.NODE_ENV !== 'production') {
   rendererConfig.plugins.push(
     new webpack.DefinePlugin({
       '__resources': `"${path.join(__dirname, '../resources').replace(/\\/g, '\\\\')}"`
-    }),
-    new OptimizeJsPlugin({
-      sourceMap: false
     })
   )
 }
@@ -182,9 +189,6 @@ if (process.env.NODE_ENV === 'production') {
     }),
     new webpack.DefinePlugin({
       'process.env.NODE_ENV': '"production"',
-    }),
-    new OptimizeJsPlugin({
-      sourceMap: false
     })
   )
 }

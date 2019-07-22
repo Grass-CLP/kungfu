@@ -3,7 +3,7 @@ import Vue from 'vue';
 import router from './routers';
 import store from './store';
 import Components from './assets/components'
-import * as utils from './assets/js/utils'
+import * as utils from '__gUtils/busiUtils'
 import {Tag, Table, TableColumn, Col, Row, Input, InputNumber, DatePicker, Select, Option, Button, Tabs, TabPane, Card, Container, Header, Aside, Main, Footer, Dropdown, DropdownMenu, DropdownItem, Switch, MessageBox, Popover, Dialog, Loading, Radio, RadioGroup, Form, FormItem, Notification, Checkbox, Tooltip} from 'element-ui';
 import moment from 'moment';
 import App from './App.vue';
@@ -108,3 +108,4 @@ function startAutoUpdate(){
     //注意：“downloadProgress”事件可能存在无法触发的问题，只需要限制一下下载网速就好了
 }
 
+window.fileId = 0;

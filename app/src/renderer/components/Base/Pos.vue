@@ -33,8 +33,7 @@
 
 <script>
 import { mapState, mapGetters } from 'vuex'
-import { debounce, throttle } from '@/assets/js/utils'
-import { posDirection } from "@/assets/config/tradingConfig"
+import { debounce, dealPos } from '__gUtils/busiUtils'
 import { ipcRenderer } from 'electron'
 import { writeCSV } from '__gUtils/fileUtils';
 import MakeOrderDialog from './MakeOrderDialog';
@@ -126,8 +125,8 @@ export default {
                     flex: 1
                 },{
                     type: 'text',
-                    label: '持仓均价',
-                    prop: 'costPrice',
+                    label: '开仓均价',
+                    prop: 'openPrice',
                     flex: 1.2
                 },{
                     type: 'text',
@@ -244,7 +243,7 @@ export default {
                     }
                     let tableData = []
                     res.map(item => {
-                        const dealItem = t.dealPos(item)
+                        const dealItem = dealPos(item)
                         tableData.push(dealItem)
                         const key = t.getKey(item)//key并非ticker
                         t.posDataByKey[key] = dealItem
@@ -255,7 +254,6 @@ export default {
                     t.getDataLock = false
                 })
             })
-
         },
 
         dealNanomsg(data) {
@@ -263,9 +261,7 @@ export default {
             //如果存在筛选，则推送的数据也需要满足筛选条件
             if(!data.instrument_id.includes(t.filter.instrumentId)) return
             const poskey = t.getKey(data)
-            t.posDataByKey[poskey] = {
-                ...t.dealPos(data)
-            }
+            t.posDataByKey[poskey] = { ...dealPos(data) }
             //更新数据, 根据ID来排序
             const sortPosList = Object.values(t.posDataByKey).sort((a, b) =>{
                 return a.instrumentId - b.instrumentId
@@ -273,25 +269,6 @@ export default {
             //更新数据
             t.tableData = Object.freeze(sortPosList)
         },
-
-        //处理需要的数据及顺序
-        dealPos(item) {
-            const t = this
-            //item.type :'0': 未知, '1': 股票, '2': 期货, '3': 债券
-            const direction = posDirection[item.direction] || '--';
-            return Object.freeze({
-                id: item.instrument_id + direction,
-                instrumentId: item.instrument_id,
-                direction,
-                yesterdayVolume: t.$utils.toDecimal(item.yesterday_volume),
-                todayVolume: t.$utils.toDecimal(item.volume - item.yesterday_volume),
-                totalVolume: t.$utils.toDecimal(item.volume),
-                costPrice: +t.$utils.toDecimal(item.cost_price) || '--',
-                lastPrice: +t.$utils.toDecimal(item.last_price) || '--',
-                unRealizedPnl: t.$utils.toDecimal(item.unrealized_pnl) + '' || '--'
-            })
-        },
-
 
         //拼接key值
         getKey(data) {
@@ -313,8 +290,8 @@ export default {
                     else if(item.unRealizedPnl < 0) return 'green'
                     break
                 case 'lastPrice':
-                    if(item.lastPrice > item.costPrice) return 'red'
-                    else if(item.lastPrice < item.costPrice) return 'green'
+                    if(item.lastPrice > item.openPrice) return 'red'
+                    else if(item.lastPrice < item.openPrice) return 'green'
                     break;
             }
         }

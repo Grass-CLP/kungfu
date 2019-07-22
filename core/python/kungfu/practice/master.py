@@ -5,17 +5,24 @@ import time
 import functools
 import pyyjj
 import pywingchun
-import kungfu.service.kfs as kfs
-import kungfu.yijinjing.journal as kfj
+
+from . import os_signal
+
 from kungfu import nanomsg
 from kungfu.log import create_logger
-from . import os_signal
+
+import kungfu.service.kfs as kfs
+from kungfu.service.kfs import system
+from kungfu.service.kfs import calendar
+
+import kungfu.yijinjing.journal as kfj
+import kungfu.yijinjing.time as kft
+from kungfu.log import create_logger
+
 from kungfu.wingchun.calendar import Calendar
+import kungfu.yijinjing.msg as yjj_msg
 
 SECOND_IN_NANO = int(1e9)
-
-def get_socket_fd(socket):
-    return socket.getsockopt(level=nanomsg.SOL_SOCKET, option=nanomsg.RCVFD)
 
 
 class Master(pyyjj.master):
@@ -26,13 +33,11 @@ class Master(pyyjj.master):
         self.ctx.logger = create_logger("watcher", ctx.log_level, self.io_device.home)
         self.ctx.apprentices = {}
 
-        # calendar_db_location = pyyjj.location(pyyjj.mode.LIVE, pyyjj.category.SYSTEM, 'etc', 'kungfu', ctx.locator)
-        # ctx.calendar = pywingchun.Calendar(ctx.locator.layout_file(calendar_db_location, pyyjj.layout.SQLITE, 'holidays'))
-        # ctx.current_trading_day = ctx.calendar.current_trading_day()
         ctx.calendar = Calendar(ctx)
-        ctx.current_trading_day = ctx.calendar.current_trading_day()
+        ctx.trading_day = ctx.calendar.trading_day
+        self.publish_time(yjj_msg.TradingDay, ctx.calendar.trading_day_ns)
 
-        os_signal.handle_os_signals(self.exit_gracefully)
+        ctx.master = self
 
     def on_notice(self, event):
         try:
@@ -44,7 +49,10 @@ class Master(pyyjj.master):
     def on_interval_check(self, nanotime):
         kfs.run_tasks(self.ctx)
 
-    def exit_gracefully(self, signum, frame):
+    def on_register(self, event):
+        self.send_time(event.source, yjj_msg.TradingDay, self.ctx.calendar.trading_day_ns)
+
+    def on_exit(self):
         self.ctx.logger.info('kungfu master stopping')
 
         for pid in self.ctx.apprentices:

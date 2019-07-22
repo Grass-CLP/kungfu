@@ -24,7 +24,6 @@
 #include <hffix.hpp>
 
 #include <kungfu/yijinjing/msg.h>
-#include <kungfu/yijinjing/time.h>
 #include <kungfu/yijinjing/log/setup.h>
 #include <kungfu/yijinjing/util/os.h>
 
@@ -39,7 +38,8 @@ namespace kungfu
 {
     namespace practice
     {
-        apprentice::apprentice(location_ptr home, bool low_latency) : hero(std::make_shared<io_device_client>(home, low_latency))
+        apprentice::apprentice(location_ptr home, bool low_latency) :
+                hero(std::make_shared<io_device_client>(home, low_latency)), timer_usage_count_(0)
         {
             auto uid_str = fmt::format("{:08x}", get_live_home_uid());
             auto locator = get_io_device()->get_home()->locator;
@@ -58,12 +58,30 @@ namespace kungfu
             require_read_from(master_commands_location_->uid, trigger_time, source_id, pub);
         }
 
-        void apprentice::react(const observable<event_ptr> &events)
+        void apprentice::add_timer(int64_t nanotime, const std::function<void(event_ptr)>& callback)
+        {
+            events_ | timer(nanotime) |
+            $([&, callback](event_ptr e)
+            {
+                callback(e);
+            });
+        }
+
+        void apprentice::add_time_interval(int64_t duration, const std::function<void(event_ptr)>& callback)
+        {
+            events_ | time_interval(std::chrono::nanoseconds(duration)) |
+            $([&, callback](event_ptr e)
+              {
+                  callback(e);
+              });
+        }
+
+        void apprentice::react()
         {
             if (get_io_device()->get_home()->mode == mode::LIVE)
             {
-                events | skip_until(events | is(msg::type::Register) | from(master_home_location_->uid)) | first() |
-                timeout(seconds(1), observe_on_new_thread()) |
+                events_ | skip_until(events_ | is(msg::type::Register) | from(master_home_location_->uid)) | first() |
+                rx::timeout(seconds(1), observe_on_new_thread()) |
                 $([&](event_ptr e)
                   {
                       // timeout happens on new thread, can not subscribe journal reader here
@@ -84,7 +102,7 @@ namespace kungfu
                       // once registered this subscriber finished, no worry for performance.
                   });
 
-                events | skip_until(events | is(msg::type::Register) | from(master_home_location_->uid)) | first() |
+                events_ | skip_until(events_ | is(msg::type::Register) | from(master_home_location_->uid)) | first() |
                 $([&](event_ptr e)
                   {
                       reader_->join(master_commands_location_, get_live_home_uid(), e->gen_time());
@@ -94,19 +112,25 @@ namespace kungfu
                 reader_->join(master_commands_location_, get_live_home_uid(), begin_time_);
             }
 
-            events | is(msg::type::Location) |
+            events_ |
+            $([&](event_ptr event)
+              {
+                  now_ = event->gen_time();
+              });
+
+            events_ | is(msg::type::Location) |
             $([&](event_ptr e)
               {
                   register_location_from_event(e);
               });
 
-            events | is(msg::type::Register) |
+            events_ | is(msg::type::Register) |
             $([&](event_ptr e)
               {
                   register_location_from_event(e);
               });
 
-            events | is(msg::type::Deregister) |
+            events_ | is(msg::type::Deregister) |
             $([&](event_ptr e)
               {
                   reader_->disjoin(e->source());
@@ -114,24 +138,31 @@ namespace kungfu
                   deregister_location(e->gen_time(), e->source());
               });
 
-            events | is(msg::type::RequestWriteTo) |
+            events_ | is(msg::type::RequestWriteTo) |
             $([&](event_ptr e)
               {
                   on_write_to(e);
               });
 
-            events | filter([&](event_ptr e){
-                return e->msg_type() == msg::type::RequestReadFromPublic or e->msg_type() == msg::type::RequestReadFrom;
-            }) |
+            events_ | filter([&](event_ptr e)
+                            {
+                                return e->msg_type() == msg::type::RequestReadFromPublic or e->msg_type() == msg::type::RequestReadFrom;
+                            }) |
             $([&](event_ptr e)
               {
                   on_read_from(e);
               });
 
-            events | is(msg::type::RequestStart) | first() |
+            events_ | is(msg::type::RequestStart) | first() |
             $([&](event_ptr e)
               {
-                  on_start(events);
+                  on_start();
+              });
+
+            events_ | is(msg::type::TradingDay) |
+            $([&](event_ptr e)
+              {
+                  on_trading_day(e, e->data<int64_t>());
               });
 
             reader_->join(master_home_location_, 0, begin_time_);
@@ -198,7 +229,7 @@ namespace kungfu
             get_io_device()->get_publisher()->publish(request.dump());
         }
 
-        void apprentice::register_location_from_event(const yijinjing::event_ptr& event)
+        void apprentice::register_location_from_event(const yijinjing::event_ptr &event)
         {
             const char *buffer = &(event->data<char>());
             std::string json_str{};
@@ -250,7 +281,7 @@ public:
                                  })).merge(events_ | filter([&, ns](event_ptr e)
                                                             {
                                                                 std::cout << "now_    = " << time::strftime(e->gen_time()) << std::endl;
-                                                                if (e->gen_time() >= start_time_ + ns)
+                                                                if (e->gen_time() > start_time_ + ns)
                                                                 {
                                                                     throw timeout_error("timeout");
                                                                 }
@@ -327,6 +358,9 @@ public:
         std::cout << sizeof(journal::frame_header) << std::endl;
 
         events_.connect();
+
+        std::shared_ptr<std::vector<char>> vp;
+        vp->insert(vp->end(), 0);
     }
 };
 

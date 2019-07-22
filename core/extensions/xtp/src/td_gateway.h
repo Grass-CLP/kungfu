@@ -30,14 +30,14 @@ namespace kungfu
 
                 ~TdGateway() override;
 
-                void on_start(const rx::observable<yijinjing::event_ptr> &events) override;
-
                 const AccountType get_account_type() const override
                 { return AccountType::Stock; }
 
                 bool insert_order(const yijinjing::event_ptr& event) override;
 
                 bool cancel_order(const yijinjing::event_ptr& event) override;
+
+                void on_trading_day(const yijinjing::event_ptr &event, int64_t daytime) override;
 
                 bool req_position() override;
 
@@ -171,6 +171,10 @@ namespace kungfu
                 OnQueryIPOQuotaInfo(XTPQueryIPOQuotaRsp *quota_info, XTPRI *error_info, int request_id, bool is_last, uint64_t session_id) override
                 {};
 
+            protected:
+
+                void on_start() override;
+
             private:
                 int client_id_;
                 std::string software_key_;
@@ -185,8 +189,9 @@ namespace kungfu
 
                 int request_id_;
 
-                std::shared_ptr<OrderMapper> order_mapper_;
+                std::string trading_day_;
 
+                std::shared_ptr<OrderMapper> order_mapper_;
             };
         }
     }

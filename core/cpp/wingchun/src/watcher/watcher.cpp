@@ -14,7 +14,6 @@ using namespace kungfu::rx;
 using namespace kungfu::yijinjing;
 using namespace kungfu::yijinjing::data;
 using namespace kungfu::wingchun::msg::data;
-using namespace kungfu::wingchun::msg::nanomsg;
 
 namespace kungfu
 {
@@ -55,68 +54,6 @@ namespace kungfu
             data["state"] = state;
             msg["data"] = data;
             publish(msg.dump());
-        }
-
-        void Watcher::react(const rx::observable<yijinjing::event_ptr> &events)
-        {
-            apprentice::react(events);
-
-            /**
-             * process active query from clients
-             */
-            events |
-            filter([&](event_ptr event)
-                   {
-                       return dynamic_cast<nanomsg::nanomsg_json *>(event.get()) != nullptr and event->source() == 0;
-                   }) |
-            $([&](event_ptr event)
-              {
-                  // let python do the actual job, we just operate the I/O part
-                  std::string response = handle_request(event->to_string());
-                  get_io_device()->get_rep_sock()->send(response);
-              });
-
-            /**
-             * process trade events
-             */
-            events | is(msg::type::Quote) |
-            $([&](event_ptr event)
-              {
-                  on_quote(event, event->data<Quote>());
-              });
-
-            events | is(msg::type::Order) |
-            $([&](event_ptr event)
-              {
-                  SPDLOG_INFO("hanlde order from {} {:08x}", get_location(event->source())->uname, get_location(event->source())->uid);
-                  on_order(event, event->data<Order>());
-              });
-
-            events | is(msg::type::Trade) |
-            $([&](event_ptr event)
-              {
-                  on_trade(event, event->data<Trade>());
-              });
-
-            events | is(msg::type::AccountInfo) |
-            $([&](event_ptr event)
-              {
-                  memcpy(&account_info_, &event->data<AccountInfo>(), sizeof(AccountInfo));
-              });
-
-            events | is(msg::type::Position) |
-            $([&](event_ptr event)
-              {
-                  position_buffer_.push_back(event->data<Position>());
-              });
-
-            events | is(msg::type::PositionEnd) |
-            $([&](event_ptr event)
-              {
-                  on_assets(account_info_, position_buffer_);
-                  position_buffer_.clear();
-                  memset(&account_info_, 0, sizeof(account_info_));
-              });
         }
 
         void Watcher::register_location(int64_t trigger_time, const yijinjing::data::location_ptr &app_location)
@@ -213,9 +150,68 @@ namespace kungfu
             }
         }
 
-        void Watcher::on_start(const rx::observable<yijinjing::event_ptr> &events)
+        void Watcher::on_start()
         {
-            apprentice::on_start(events);
+            apprentice::on_start();
+
+            pre_start();
+
+            /**
+             * process active query from clients
+             */
+            events_ |
+            filter([&](event_ptr event)
+                   {
+                       return dynamic_cast<nanomsg::nanomsg_json *>(event.get()) != nullptr and event->source() == 0;
+                   }) |
+            $([&](event_ptr event)
+              {
+                  // let python do the actual job, we just operate the I/O part
+                  std::string response = handle_request(event->to_string());
+                  get_io_device()->get_rep_sock()->send(response);
+              });
+
+            /**
+             * process trade events
+             */
+            events_ | is(msg::type::Quote) |
+            $([&](event_ptr event)
+              {
+                  on_quote(event, event->data<Quote>());
+              });
+
+            events_ | is(msg::type::Order) |
+            $([&](event_ptr event)
+              {
+                  SPDLOG_INFO("hanlde order from {} {:08x}", get_location(event->source())->uname, get_location(event->source())->uid);
+                  on_order(event, event->data<Order>());
+              });
+
+            events_ | is(msg::type::Trade) |
+            $([&](event_ptr event)
+              {
+                  on_trade(event, event->data<Trade>());
+              });
+
+            events_ | is(msg::type::AssetInfo) |
+            $([&](event_ptr event)
+              {
+                  memcpy(&asset_info_, &event->data<AssetInfo>(), sizeof(AssetInfo));
+              });
+
+            events_ | is(msg::type::Position) |
+            $([&](event_ptr event)
+              {
+                  position_buffer_.push_back(event->data<Position>());
+              });
+
+            events_ | is(msg::type::PositionEnd) |
+            $([&](event_ptr event)
+              {
+                  on_assets(asset_info_, position_buffer_);
+                  position_buffer_.clear();
+                  memset(&asset_info_, 0, sizeof(asset_info_));
+              });
         }
 
         void Watcher::watch(int64_t trigger_time, const yijinjing::data::location_ptr &app_location)

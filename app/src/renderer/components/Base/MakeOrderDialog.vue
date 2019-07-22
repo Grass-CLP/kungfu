@@ -111,9 +111,10 @@
 
 <script>
 import { mapState } from 'vuex';
-import { sourceType } from '@/assets/config/accountConfig'
-import { biggerThanZeroValidator } from '@/assets/js/validator';
-import { nanoMakeOrder } from '@/io/nano/nanoReq';
+import { sourceType } from '__gConfig/accountConfig'
+import { biggerThanZeroValidator } from '__assets/validator';
+import { nanoMakeOrder } from '__io/nano/nanoReq';
+import { deepClone } from '__gUtils/busiUtils';
 
 export default {
     name: 'make-order-dialog',
@@ -211,7 +212,7 @@ export default {
             t.$refs['make-order-form'].validate(valid => {
                 if(valid) {
                     //需要对account_id再处理
-                    const makeOrderForm = t.$utils.deepClone(t.makeOrderForm)
+                    const makeOrderForm = deepClone(t.makeOrderForm)
                     const sourceAccountId = makeOrderForm.account_id;
                     const gatewayName = `td_${sourceAccountId}`
                     makeOrderForm.account_id = makeOrderForm.account_id.toAccountId()

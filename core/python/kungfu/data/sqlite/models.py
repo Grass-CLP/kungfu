@@ -12,7 +12,7 @@ class Holiday(Base):
     __tablename__ = "holidays"
     __table_args__ = (PrimaryKeyConstraint('region', 'holiday'),)
     region = Column(String)
-    holiday = Column(Integer)
+    holiday = Column(Date)
 
 class FutureInstrument(Base):
     __tablename__ = 'future_instrument'
@@ -99,8 +99,12 @@ class LedgerMeta(Base):
     uname = Column(String,  primary_key = True)
     update_time = Column(Integer)
 
-class BalanceMixin(object):
+class AssetInfoMixin(object):
     trading_day = Column(String)
+    update_time = Column(Integer)
+    account_id = Column(String)
+    source_id = Column(String)
+    client_id = Column(String)
     initial_equity = Column(Float)
     static_equity = Column(Float)
     dynamic_equity = Column(Float)
@@ -117,25 +121,36 @@ class BalanceMixin(object):
     position_pnl = Column(Float)
     close_pnl = Column(Float)
 
-class AccountBalance(BalanceMixin, Base):
+    def __init__(self, **kwargs):
+        for attr in self.__mapper__.columns.keys():
+            if attr in kwargs:
+                setattr(self, attr, kwargs[attr])
+
+class AccountAssetInfo(AssetInfoMixin, Base):
     __tablename__ = "account"
-    __table_args__ = (PrimaryKeyConstraint('account_id', 'source_id'),)
-    account_id = Column(String)
-    source_id = Column(String)
+    __table_args__ = (PrimaryKeyConstraint('account_id'),)
 
-class PortfolioBalance(BalanceMixin, Base):
+class PortfolioAssetInfo(AssetInfoMixin, Base):
     __tablename__ = "portfolio"
-    client_id = Column(String, nullable = False, primary_key = True)
+    __table_args__ = (PrimaryKeyConstraint('client_id'),)
 
-class SubPortfolioBalance(BalanceMixin, Base):
+class SubPortfolioAssetInfo(AssetInfoMixin, Base):
     __tablename__ = "subportfolio"
-    __table_args__ = (PrimaryKeyConstraint('account_id', 'source_id', 'client_id'),)
-    account_id = Column(String)
-    source_id = Column(String)
-    client_id = Column(String)
+    __table_args__ = (PrimaryKeyConstraint('account_id', 'client_id'),)
+
+class AccountAssetInfoSnapshot(AssetInfoMixin, Base):
+    __tablename__ = "account_snapshot"
+    __table_args__ = (PrimaryKeyConstraint('account_id', 'update_time'),)
+
+class PortfolioAssetInfoSnapshot(AssetInfoMixin, Base):
+    __tablename__ = "portfolio_snapshot"
+    __table_args__ = (PrimaryKeyConstraint('client_id', "update_time"),)
 
 class PositionMixin(object):
     trading_day = Column(String)
+    account_id = Column(String)
+    source_id = Column(String)
+    client_id = Column(String)
     instrument_id = Column(String)
     instrument_type = Column(String)
     exchange_id = Column(String)
@@ -159,20 +174,20 @@ class PositionMixin(object):
     open_date = Column(String)
     expire_date = Column(String)
 
+    def __init__(self, **kwargs):
+        for attr in self.__mapper__.columns.keys():
+            if attr in kwargs:
+                setattr(self, attr, kwargs[attr])
+
 class AccountPosition(PositionMixin, Base):
     __tablename__ = "account_position"
-    __table_args__ = (PrimaryKeyConstraint('account_id', 'source_id', 'instrument_id', 'exchange_id', 'direction'),)
-    account_id = Column(String)
-    source_id = Column(String)
+    __table_args__ = (PrimaryKeyConstraint('account_id', 'instrument_id', 'exchange_id', 'direction'),)
 
 class PortfolioPosition(PositionMixin, Base):
     __tablename__ = "portfolio_position"
     __table_args__ = (PrimaryKeyConstraint('client_id', 'instrument_id', 'exchange_id', 'direction'),)
-    client_id = Column(String)
+
 
 class SubPortfolioPosition(PositionMixin, Base):
     __tablename__ = "subportfolio_position"
-    __table_args__ = (PrimaryKeyConstraint('account_id', 'source_id', 'client_id','instrument_id', 'exchange_id', 'direction'),)
-    account_id = Column(String)
-    source_id = Column(String)
-    client_id = Column(String)
+    __table_args__ = (PrimaryKeyConstraint('account_id', 'client_id','instrument_id', 'exchange_id', 'direction'),)

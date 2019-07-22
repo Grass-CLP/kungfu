@@ -7,7 +7,7 @@
 </main-content>
 </template>
 <script>
-import * as STRATEGY_API from '@/io/db/strategy';
+import * as STRATEGY_API from '__io/db/strategy';
 import FileTree from './components/FileTree';
 import Editor from './components/CodeEditor';
 import { setTimeout } from 'timers';
@@ -35,10 +35,6 @@ export default {
             return
         }
         t.updateStrategy(strategyId)
-        
-        //绑定全局 fileId
-        window.fileId = 0;
-
 
         t.shouldClose = false;
 
